@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snow Day Predictor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f8ff;
+        }
+        h1 {
+            color: #0066cc;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .slider-container {
+            margin-bottom: 20px;
+        }
+        .slider-container label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .slider-value {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+            margin-left: 10px;
+        }
+        .result {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 24px;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        .yes {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .no {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .probability {
+            font-size: 18px;
+            margin-top: 10px;
+        }
+        input[type="range"] {
+            width: 70%;
+        }
+        button {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0055aa;
+        }
+        .snowflake {
+            position: absolute;
+            font-size: 20px;
+            color: #99ccff;
+            text-shadow: 0 0 5px white;
+            z-index: -1;
+            opacity: 0.8;
+            animation: fall linear;
+        }
+        @keyframes fall {
+            from { transform: translateY(-100px); }
+            to { transform: translateY(calc(100vh + 100px)); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>❄️ Snow Day Predictor ❄️</h1>
+        
+        <div class="slider-container">
+            <label for="predicted-snow">Predicted Snow (inches):</label>
+            <input type="range" id="predicted-snow" min="0" max="12" value="3" step="0.1">
+            <span class="slider-value" id="predicted-snow-value">3.0</span>
+        </div>
+        
+        <div class="slider-container">
+            <label for="previous-snow">Previous Snow Accumulation (inches):</label>
+            <input type="range" id="previous-snow" min="0" max="24" value="0" step="0.1">
+            <span class="slider-value" id="previous-snow-value">0.0</span>
+        </div>
+        
+        <div class="slider-container">
+            <label for="temperature">Temperature (°F):</label>
+            <input type="range" id="temperature" min="-20" max="40" value="28" step="0.1">
+            <span class="slider-value" id="temperature-value">28.0</span>
+        </div>
+        
+        <button id="predict-button">Predict Snow Day</button>
+        
+        <div class="result" id="result">
+            Adjust the sliders and click "Predict Snow Day"
+        </div>
+    </div>
+
+    <script>
+        // Variables to store model weights
+        let modelWeights = null;
+        let architecture = null;
+        
+        // Load the model weights from the JSON file
+        async function loadModel() {
+            try {
+                const response = await fetch('snowday_model_advanced_rl_r0.964_p0.818.json');
+                const data = await response.json();
+                modelWeights = data.weights;
+                architecture = data.architecture;
+                console.log('Model loaded successfully');
+            } catch (error) {
+                console.error('Error loading model:', error);
+                alert('Error loading the model. Please check the console for details.');
+            }
+        }
+        
+        // Load the model when the page loads
+        window.addEventListener('DOMContentLoaded', loadModel);
+        
+        // Update slider value displays
+        document.getElementById('predicted-snow').addEventListener('input', function() {
+            document.getElementById('predicted-snow-value').textContent = parseFloat(this.value).toFixed(1);
+        });
+        
+        document.getElementById('previous-snow').addEventListener('input', function() {
+            document.getElementById('previous-snow-value').textContent = parseFloat(this.value).toFixed(1);
+        });
+        
+        document.getElementById('temperature').addEventListener('input', function() {
+            document.getElementById('temperature-value').textContent = parseFloat(this.value).toFixed(1);
+        });
+        
+        // Sigmoid activation function
+        function sigmoid(x) {
+            return 1 / (1 + Math.exp(-x));
+        }
+        
+        // ReLU activation function
+        function relu(x) {
+            return Math.max(0, x);
+        }
+        
+        // Forward pass through the neural network
+        function forwardPass(inputs) {
+            if (!modelWeights) {
+                alert('Model not loaded yet. Please try again.');
+                return null;
+            }
+            
+            // First hidden layer
+            let layer1 = [];
+            for (let i = 0; i < modelWeights.W1.length; i++) {
+                let sum = 0;
+                for (let j = 0; j < inputs.length; j++) {
+                    sum += inputs[j] * modelWeights.W1[i][j];
+                }
+                sum += modelWeights.b1[i][0];
+                layer1.push(relu(sum));
+            }
+            
+            // Second hidden layer
+            let layer2 = [];
+            for (let i = 0; i < modelWeights.W2.length; i++) {
+                let sum = 0;
+                for (let j = 0; j < layer1.length; j++) {
+                    sum += layer1[j] * modelWeights.W2[i][j];
+                }
+                sum += modelWeights.b2[i][0];
+                layer2.push(relu(sum));
+            }
+            
+            // Output layer
+            let output = 0;
+            for (let i = 0; i < modelWeights.W3[0].length; i++) {
+                output += layer2[i] * modelWeights.W3[0][i];
+            }
+            output += modelWeights.b3[0][0];
+            
+            // Apply sigmoid to get probability
+            return sigmoid(output);
+        }
+        
+        // Predict snow day
+        document.getElementById('predict-button').addEventListener('click', function() {
+            // Get input values
+            const predictedSnow = parseFloat(document.getElementById('predicted-snow').value);
+            const previousSnow = parseFloat(document.getElementById('previous-snow').value);
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            
+            // Make prediction
+            const probability = forwardPass([predictedSnow, previousSnow, temperature]);
+            if (probability === null) return;
+            
+            // Determine threshold from model metrics
+            const threshold = modelWeights ? 0.442 : 0.5; // Default to 0.5 if model not loaded
+            
+            // Display result
+            const resultElement = document.getElementById('result');
+            resultElement.innerHTML = '';
+            
+            const decision = probability >= threshold ? 'YES' : 'NO';
+            const resultClass = probability >= threshold ? 'yes' : 'no';
+            
+            resultElement.classList.remove('yes', 'no');
+            resultElement.classList.add(resultClass);
+            
+            const resultText = document.createElement('div');
+            resultText.textContent = `${decision}, ${probability >= threshold ? 'there will' : 'there will not'} be a Snow Day!`;
+            resultElement.appendChild(resultText);
+            
+            const probabilityText = document.createElement('div');
+            probabilityText.className = 'probability';
+            probabilityText.textContent = `Probability: ${(probability * 100).toFixed(1)}%`;
+            resultElement.appendChild(probabilityText);
+            
+            // Snow animation if the result is YES
+            if (probability >= threshold) {
+                createSnowflakes();
+            } else {
+                // Remove any existing snowflakes
+                document.querySelectorAll('.snowflake').forEach(flake => flake.remove());
+            }
+        });
+        
+        // Create snowflake animation
+        function createSnowflakes() {
+            // Remove any existing snowflakes
+            document.querySelectorAll('.snowflake').forEach(flake => flake.remove());
+            
+            // Create new snowflakes
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const snowflake = document.createElement('div');
+                    snowflake.className = 'snowflake';
+                    snowflake.textContent = '❄';
+                    snowflake.style.left = `${Math.random() * 100}%`;
+                    
+                    // Random animation duration between 5 and 15 seconds
+                    const duration = 5 + Math.random() * 10;
+                    snowflake.style.animationDuration = `${duration}s`;
+                    
+                    document.body.appendChild(snowflake);
+                    
+                    // Remove snowflake when animation completes
+                    setTimeout(() => {
+                        snowflake.remove();
+                    }, duration * 1000);
+                }, i * 200); // Stagger snowflake creation
+            }
+        }
+    </script>
+</body>
+</html>
